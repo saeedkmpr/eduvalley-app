@@ -27,17 +27,33 @@
       </div>
     </div>
 
-    <!-- LOGIN CARD -->
+    <!-- LOGIN / SIGNUP CARD -->
     <div id="loginCard" class="bg-white p-6">
       <h2 class="text-gray-900 text-3xl font-bold text-center mb-8">Welcome Back</h2>
 
-      <!-- Email / Password -->
+      <!-- Email / Password (LOGIN) -->
       <div id="emailMode" class="space-y-6">
         <div><input id="emailInput" class="form-input w-full rounded-md border-gray-300 bg-gray-50 h-14 p-4" placeholder="Email"/></div>
         <div><input id="passInput" class="form-input w-full rounded-md border-gray-300 bg-gray-50 h-14 p-4" type="password" placeholder="Password"/></div>
         <button id="forgotBtn" class="text-brand text-sm font-medium pt-1 pb-2 block w-full text-right hover:underline">Forgot Password?</button>
         <button id="emailLoginBtn" class="w-full h-12 px-5 bg-brand text-white font-bold rounded-md hover:opacity-90">Login</button>
+        <div class="mt-3 text-center">
+          <button id="toSignupBtn" class="text-brand text-sm font-medium hover:underline">New here? Create an account</button>
+        </div>
         <button id="toOtpBtn" class="text-brand text-sm font-medium pt-4 block w-full text-center hover:underline">Or login with OTP</button>
+      </div>
+
+      <!-- Sign Up -->
+      <div id="signupMode" class="space-y-4 hidden">
+        <div><input id="suName" class="form-input w-full rounded-md border-gray-300 bg-gray-50 h-14 p-4" placeholder="Full name"/></div>
+        <div><input id="suEmail" class="form-input w-full rounded-md border-gray-300 bg-gray-50 h-14 p-4" placeholder="Email"/></div>
+        <div><input id="suPass" class="form-input w-full rounded-md border-gray-300 bg-gray-50 h-14 p-4" type="password" placeholder="Password (min 6 chars)"/></div>
+        <div><input id="suPass2" class="form-input w-full rounded-md border-gray-300 bg-gray-50 h-14 p-4" type="password" placeholder="Confirm password"/></div>
+        <label class="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" id="suAgree" class="rounded border-gray-300"> I agree to the terms
+        </label>
+        <button id="signupBtn" class="w-full h-12 px-5 bg-brand text-white font-bold rounded-md hover:opacity-90">Create account</button>
+        <button id="toLoginBtn" class="text-brand text-sm font-medium pt-2 block w-full text-center hover:underline">Already have an account? Login</button>
       </div>
 
       <!-- Phone / OTP -->
@@ -106,25 +122,23 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
-      getAuth, signInWithEmailAndPassword, sendPasswordResetEmail,
-      onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, signOut
+      getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+      sendPasswordResetEmail, onAuthStateChanged, RecaptchaVerifier,
+      signInWithPhoneNumber, signOut, updateProfile
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-    // 1) PASTE YOUR CONFIG HERE
+    /* ==== Your Firebase Config (from console) ==== */
     const firebaseConfig = {
-  apiKey: "AIzaSyA50KDgVJJAUBUSOR64HKSTFFAyX2Y_ds",
-  authDomain: "eduvalley-app.firebaseapp.com",
-  projectId: "eduvalley-app",
-  storageBucket: "eduvalley-app.appspot.com",
-  messagingSenderId: "118584707447",
-  appId: "1:118584707447:web:bbce8bac8369e8762caf72",
-  measurementId: "G-CC9ZN7JC4"
-};
-
-      // (optional) messagingSenderId, storageBucket...
+      apiKey: "AIzaSyA50KDgVJJAUBUSOR64HKSTFFAyX2Y_ds",
+      authDomain: "eduvalley-app.firebaseapp.com",
+      projectId: "eduvalley-app",
+      storageBucket: "eduvalley-app.appspot.com",
+      messagingSenderId: "118584707447",
+      appId: "1:118584707447:web:bbce8bac8369e8762caf72",
+      measurementId: "G-CC9ZN7JC4"
     };
 
-    // 2) Init
+    // init
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
 
@@ -134,66 +148,116 @@
     const statusEl = document.getElementById("status");
     const userLabel = document.getElementById("userLabel");
 
-    // Email mode
     const emailMode = document.getElementById("emailMode");
     const otpMode   = document.getElementById("otpMode");
-    const emailInput = document.getElementById("emailInput");
-    const passInput  = document.getElementById("passInput");
-    document.getElementById("emailLoginBtn").onclick = async () => {
-      try {
-        setStatus("Signing in...");
-        await signInWithEmailAndPassword(auth, emailInput.value.trim(), passInput.value);
-        setStatus("");
-      } catch (e) { setStatus(e.message, true); }
-    };
-    document.getElementById("forgotBtn").onclick = async () => {
-      try {
-        if (!emailInput.value) return setStatus("Enter email first.", true);
-        await sendPasswordResetEmail(auth, emailInput.value.trim());
-        setStatus("Password reset email sent.");
-      } catch (e) { setStatus(e.message, true); }
-    };
-    document.getElementById("toOtpBtn").onclick = () => switchMode("otp");
+    const signupMode= document.getElementById("signupMode");
 
-    // OTP mode
-    let confirmationResult = null;
-    const otpRow = document.getElementById("otpRow");
-    const phoneInput = document.getElementById("phoneInput");
-    const otpInput = document.getElementById("otpInput");
-
-    function initRecaptcha() {
-      // create only once
-      if (window._recaptchaInited) return;
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", { size: "invisible" });
-      window._recaptchaInited = true;
+    function setStatus(msg, err=false){
+      statusEl.textContent = msg || "";
+      statusEl.className = "text-center text-sm mt-4 " + (err?"text-red-600":"text-gray-600");
     }
-
-    document.getElementById("sendOtpBtn").onclick = async () => {
-      try {
-        initRecaptcha();
-        setStatus("Sending OTP...");
-        confirmationResult = await signInWithPhoneNumber(auth, phoneInput.value.trim(), window.recaptchaVerifier);
-        otpRow.classList.remove("hidden");
-        setStatus("OTP sent. Check your phone.");
-      } catch (e) { setStatus(e.message, true); }
-    };
-    document.getElementById("verifyOtpBtn").onclick = async () => {
-      try {
-        setStatus("Verifying...");
-        await confirmationResult.confirm(otpInput.value.trim());
-        setStatus("");
-      } catch (e) { setStatus(e.message, true); }
-    };
-    document.getElementById("toEmailBtn").onclick = () => switchMode("email");
-
-    function switchMode(mode){
-      if(mode==="otp"){ emailMode.classList.add("hidden"); otpMode.classList.remove("hidden"); }
-      else{ otpMode.classList.add("hidden"); emailMode.classList.remove("hidden"); }
+    function show(mode){
+      for (const el of [emailMode, otpMode, signupMode]) el.classList.add("hidden");
+      (mode==="email"?emailMode:mode==="otp"?otpMode:signupMode).classList.remove("hidden");
       setStatus("");
     }
 
-    // Nav / demo actions
-    document.getElementById("helpBtn").onclick = () => alert("Login with Email/Password or Phone OTP.");
+    // ---- LOGIN (email/password) ----
+    const emailInput = document.getElementById("emailInput");
+    const passInput  = document.getElementById("passInput");
+    document.getElementById("emailLoginBtn").onclick = async () => {
+      const email = (emailInput.value||"").trim();
+      const pass  = passInput.value||"";
+      if(!email || !pass) return setStatus("Enter email & password.", true);
+      try{
+        setStatus("Signing in…");
+        await signInWithEmailAndPassword(auth, email, pass);
+        setStatus("");
+      }catch(e){
+        setStatus(e.message, true);
+      }
+    };
+    document.getElementById("forgotBtn").onclick = async () => {
+      const email = (emailInput.value||"").trim();
+      if(!email) return setStatus("Enter email first.", true);
+      try{ await sendPasswordResetEmail(auth, email); setStatus("Password reset email sent."); }
+      catch(e){ setStatus(e.message, true); }
+    };
+    document.getElementById("toOtpBtn").onclick = () => show("otp");
+
+    // ---- SIGN UP ----
+    document.getElementById("toSignupBtn").onclick = () => show("signup");
+    document.getElementById("toLoginBtn").onclick  = () => show("email");
+
+    const suName  = document.getElementById("suName");
+    const suEmail = document.getElementById("suEmail");
+    const suPass  = document.getElementById("suPass");
+    const suPass2 = document.getElementById("suPass2");
+    const suAgree = document.getElementById("suAgree");
+
+    document.getElementById("signupBtn").onclick = async () => {
+      const name  = (suName.value||"").trim();
+      const email = (suEmail.value||"").trim();
+      const p1 = suPass.value||"", p2 = suPass2.value||"";
+      if(!name) return setStatus("Enter your name.", true);
+      if(!email) return setStatus("Enter your email.", true);
+      if(p1.length < 6) return setStatus("Password must be at least 6 characters.", true);
+      if(p1 !== p2) return setStatus("Passwords do not match.", true);
+      if(!suAgree.checked) return setStatus("Please accept the terms.", true);
+
+      try{
+        setStatus("Creating account…");
+        const cred = await createUserWithEmailAndPassword(auth, email, p1);
+        await updateProfile(cred.user, { displayName: name });
+        setStatus("Account created. Logged in.");
+        // onAuthStateChanged will switch screens
+      }catch(e){
+        setStatus(e.message, true);
+      }
+    };
+
+    // ---- PHONE / OTP ----
+    const recaptchaDiv = document.getElementById("recaptcha-container");
+    let confirmationResult = null;
+    function ensureRecaptcha(){
+      if (window._recaptchaReady) return;
+      const anchor = document.createElement("div");
+      anchor.id = "recaptcha-visible";
+      recaptchaDiv.appendChild(anchor);
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-visible", {
+        size: "invisible",
+        callback: () => {},
+        "expired-callback": () => setStatus("reCAPTCHA expired. Try again.", true)
+      });
+      window._recaptchaReady = true;
+    }
+    const phoneInput = document.getElementById("phoneInput");
+    const otpRow = document.getElementById("otpRow");
+    const otpInput = document.getElementById("otpInput");
+
+    document.getElementById("sendOtpBtn").onclick = async () => {
+      const phone = (phoneInput.value||"").replace(/\s+/g,"");
+      if(!/^\+\d{10,15}$/.test(phone)) return setStatus("Enter phone like +91XXXXXXXXXX", true);
+      try{
+        ensureRecaptcha();
+        setStatus("Sending OTP…");
+        confirmationResult = await signInWithPhoneNumber(auth, phone, window.recaptchaVerifier);
+        otpRow.classList.remove("hidden");
+        setStatus("OTP sent. Check your phone.");
+      }catch(e){ setStatus(e.message, true); }
+    };
+    document.getElementById("verifyOtpBtn").onclick = async () => {
+      const code = (otpInput.value||"").trim();
+      if(!code) return setStatus("Enter the OTP.", true);
+      try{
+        setStatus("Verifying…");
+        await confirmationResult.confirm(code);
+        setStatus("");
+      }catch(e){ setStatus(e.message, true); }
+    };
+
+    // ---- NAV / LOGOUT ----
+    document.getElementById("helpBtn").onclick = () => alert("Login with Email/Password or Phone OTP. New users: Create an account.");
     document.getElementById("coursesBtn").onclick = () => alert("Courses page coming soon.");
     document.getElementById("communityBtn").onclick = () => alert("Community feed coming soon.");
     document.getElementById("profileBtn").onclick = () => alert("Profile settings coming soon.");
@@ -203,22 +267,21 @@
     document.getElementById("navHome").onclick = () => window.scrollTo({top:0,behavior:"smooth"});
     document.getElementById("logoutBtn").onclick = async () => { await signOut(auth); };
 
-    // Auth state -> show/hide screens
+    // ---- AUTH STATE ----
     onAuthStateChanged(auth, (user) => {
       if (user) {
         loginCard.classList.add("hidden");
         appArea.classList.remove("hidden");
-        userLabel.textContent = user.phoneNumber || user.email || "User";
+        userLabel.textContent = user.displayName || user.phoneNumber || user.email || "User";
       } else {
         appArea.classList.add("hidden");
         loginCard.classList.remove("hidden");
+        show("email");
       }
     });
 
-    function setStatus(msg, isErr=false){
-      statusEl.textContent = msg || "";
-      statusEl.className = "text-center text-sm mt-4 " + (isErr ? "text-red-600" : "text-gray-600");
-    }
+    // start in email login mode
+    show("email");
   </script>
 </body>
 </html>
